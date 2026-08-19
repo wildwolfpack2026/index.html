@@ -54,7 +54,7 @@
                 <!-- Weekly -->
                 <div class="space-y-1.5">
                     <div class="flex justify-between text-sm">
-                        <span class="text-zinc-400 font-medium">Til rådighed denne uge</span>
+                        <span class="text-zinc-400 font-medium">Til rådighed pr. uge</span>
                         <span class="font-bold text-zinc-100" id="val-weekly">0 kr.</span>
                     </div>
                     <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
@@ -65,7 +65,7 @@
                 <!-- Daily -->
                 <div class="space-y-1.5">
                     <div class="flex justify-between text-sm">
-                        <span class="text-zinc-400 font-medium">Til rådighed i dag</span>
+                        <span class="text-zinc-400 font-medium">Til rådighed pr. dag</span>
                         <span class="font-bold text-emerald-400" id="val-daily">0 kr.</span>
                     </div>
                     <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
@@ -116,12 +116,13 @@
                         <option value="Transport">Transport</option>
                         <option value="Restaurant">Restaurant</option>
                         <option value="Rejse">Rejse</option>
+                        <option value="Investering">Investering</option>
                         <option value="Andet">Andet</option>
                     </select>
                     <input type="date" id="tx-date" class="bg-zinc-900 border border-zinc-700/80 text-zinc-200 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
                 </div>
 
-                <input type="text" id="tx-title" placeholder="Beskrivelse (f.eks. Indkøb, Netflix)" required class="w-full bg-zinc-900 border border-zinc-700/80 text-zinc-100 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
+                <input type="text" id="tx-title" placeholder="Beskrivelse (f.eks. Indkøb, Nordnet)" required class="w-full bg-zinc-900 border border-zinc-700/80 text-zinc-100 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
                 
                 <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-zinc-950 font-bold py-3 rounded-xl transition">
                     Tilføj
@@ -138,7 +139,7 @@
             <div id="chart-legend" class="grid grid-cols-2 gap-2 text-xs pt-2"></div>
         </section>
 
-        <!-- Transaction History for Month -->
+        <!-- Transaction History for Month (Grouped Dropdowns) -->
         <section class="space-y-3">
             <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Historik For Måneden</h2>
             <div id="tx-list" class="space-y-2"></div>
@@ -167,6 +168,7 @@
             'Transport': '#ec4899',
             'Restaurant': '#f97316',
             'Rejse': '#14b8a6',
+            'Investering': '#10b981',
             'Andet': '#6b7280',
             'Indtægt': '#22c55e'
         };
@@ -369,6 +371,15 @@
             });
         }
 
+        function toggleGroup(cat) {
+            const el = document.getElementById(`group-content-${cat}`);
+            const arrow = document.getElementById(`group-arrow-${cat}`);
+            if (el) {
+                el.classList.toggle('hidden');
+                if (arrow) arrow.classList.toggle('rotate-180');
+            }
+        }
+
         function render() {
             document.getElementById('current-month-display').innerText = viewDate.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' });
 
@@ -398,25 +409,62 @@
             if (monthTxs.length === 0) {
                 listEl.innerHTML = `<div class="text-center text-zinc-600 text-xs py-6">Ingen posteringer fundet for denne måned</div>`;
             } else {
+                // Group transactions by Category
+                const grouped = {};
                 monthTxs.forEach(tx => {
-                    const dateStr = new Date(tx.date).toLocaleDateString('da-DK', { day: 'numeric', month: 'short' });
-                    const isPositive = tx.type === 'income';
-                    const colorClass = isPositive ? 'text-emerald-400' : (tx.type === 'fixed' ? 'text-rose-400' : 'text-zinc-200');
-                    const prefix = isPositive ? '+' : '-';
+                    const groupKey = tx.type === 'income' ? 'Indtægter' : tx.category;
+                    if (!grouped[groupKey]) grouped[groupKey] = { items: [], total: 0 };
+                    grouped[groupKey].items.push(tx);
+                    grouped[groupKey].total += tx.amount;
+                });
 
-                    const card = document.createElement('div');
-                    card.className = 'glass-card p-3.5 rounded-xl flex justify-between items-center text-sm';
-                    card.innerHTML = `
-                        <div>
-                            <div class="font-medium text-zinc-100">${tx.title}</div>
-                            <div class="text-[11px] text-zinc-500">${dateStr} • <span style="color:${CATEGORY_COLORS[tx.category] || '#a1a1aa'}">${tx.category}</span></div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="font-bold ${colorClass}">${prefix}${formatDKK(tx.amount)}</span>
-                            <button onclick="deleteTx(${tx.id})" class="text-zinc-600 hover:text-rose-400 text-xs">✕</button>
+                Object.keys(grouped).forEach((cat, idx) => {
+                    const groupData = grouped[cat];
+                    const safeCatId = cat.replace(/\s+/g, '-');
+                    const color = CATEGORY_COLORS[cat] || '#a1a1aa';
+
+                    const groupCard = document.createElement('div');
+                    groupCard.className = 'glass-card rounded-xl overflow-hidden border border-zinc-800/80';
+                    
+                    let itemsHtml = '';
+                    groupData.items.forEach(tx => {
+                        const dateStr = new Date(tx.date).toLocaleDateString('da-DK', { day: 'numeric', month: 'short' });
+                        const isPositive = tx.type === 'income';
+                        const colorClass = isPositive ? 'text-emerald-400' : (tx.type === 'fixed' ? 'text-rose-400' : 'text-zinc-200');
+                        const prefix = isPositive ? '+' : '-';
+
+                        itemsHtml += `
+                            <div class="p-3 flex justify-between items-center text-xs border-b border-zinc-800/40 last:border-0 bg-zinc-900/40">
+                                <div>
+                                    <div class="font-medium text-zinc-200">${tx.title}</div>
+                                    <div class="text-[10px] text-zinc-500">${dateStr} • ${tx.type === 'fixed' ? 'Fast' : (tx.type === 'income' ? 'Indtægt' : 'Variabel')}</div>
+                                </div>
+                                <div class="flex items-center gap-2.5">
+                                    <span class="font-bold ${colorClass}">${prefix}${formatDKK(tx.amount)}</span>
+                                    <button onclick="deleteTx(${tx.id})" class="text-zinc-600 hover:text-rose-400 p-1">✕</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    groupCard.innerHTML = `
+                        <button onclick="toggleGroup('${safeCatId}')" class="w-full p-3.5 flex justify-between items-center text-sm font-medium hover:bg-zinc-800/30 transition">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></span>
+                                <span class="text-zinc-200 font-semibold">${cat}</span>
+                                <span class="text-[10px] text-zinc-500 bg-zinc-800/80 px-2 py-0.5 rounded-full">${groupData.items.length}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-zinc-100">${formatDKK(groupData.total)}</span>
+                                <span id="group-arrow-${safeCatId}" class="text-zinc-500 text-xs transition-transform duration-300 transform">▼</span>
+                            </div>
+                        </button>
+                        <div id="group-content-${safeCatId}" class="hidden border-t border-zinc-800/60">
+                            ${itemsHtml}
                         </div>
                     `;
-                    listEl.appendChild(card);
+
+                    listEl.appendChild(groupCard);
                 });
             }
 
