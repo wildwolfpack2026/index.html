@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="da" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SafeSpend</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="manifest" href="data:application/json,{%22name%22:%22SafeSpend%22,%22short_name%22:%22SafeSpend%22,%22start_url%22:%22/%22,%22display%22:%22standalone%22,%22background_color%22:%22#09090b%22,%22theme_color%22:%22#09090b%22}">
+    <style>
+        body {
+            background-color: #09090b;
+            color: #f4f4f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: rgba(24, 24, 27, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- Header med Måned/År Navigation -->
+    <header class="p-6 pb-4 border-b border-zinc-800/80 flex justify-between items-center">
+        <div>
+            <h1 class="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">SafeSpend</h1>
+            <div class="flex items-center gap-2 mt-0.5">
+                <button onclick="changeMonth(-1)" class="text-zinc-400 hover:text-white p-1">◄</button>
+                <span id="current-month-display" class="text-base font-semibold text-zinc-200 capitalize"></span>
+                <button onclick="changeMonth(1)" class="text-zinc-400 hover:text-white p-1">►</button>
+            </div>
+        </div>
+        <button onclick="exportData()" class="text-xs bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg border border-zinc-700/60 transition">
+            Backup
+        </button>
+    </header>
+
+    <main class="max-w-md mx-auto p-4 space-y-6">
+
+        <!-- Core Safe-To-Spend Dashboard -->
+        <section class="glass-card rounded-2xl p-6 space-y-5 shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            
+            <div>
+                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Til Rådighed Denne Måned</span>
+                <div class="text-4xl font-extrabold tracking-tight mt-1" id="val-available">0 kr.</div>
+            </div>
+
+            <!-- Dynamic Daily / Weekly Ratios -->
+            <div class="space-y-4 pt-2 border-t border-zinc-800/80">
+                <!-- Weekly -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-zinc-400 font-medium">Til rådighed denne uge</span>
+                        <span class="font-bold text-zinc-100" id="val-weekly">0 kr.</span>
+                    </div>
+                    <div class="w-full bg-zinc-800 rounded-full h-2 rounded-full overflow-hidden">
+                        <div id="bar-weekly" class="bg-emerald-500 h-2 transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Daily -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-zinc-400 font-medium">Til rådighed i dag</span>
+                        <span class="font-bold text-emerald-400" id="val-daily">0 kr.</span>
+                    </div>
+                    <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                        <div id="bar-daily" class="bg-emerald-400 h-2 transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Totals Overview -->
+        <section class="grid grid-cols-3 gap-3 text-center">
+            <div class="glass-card p-3 rounded-xl">
+                <span class="text-[10px] uppercase font-bold text-zinc-500 block">Indtægter</span>
+                <span id="val-income" class="text-sm font-semibold text-emerald-400">0 kr.</span>
+            </div>
+            <div class="glass-card p-3 rounded-xl">
+                <span class="text-[10px] uppercase font-bold text-zinc-500 block">Faste udgifter</span>
+                <span id="val-fixed" class="text-sm font-semibold text-rose-400">0 kr.</span>
+            </div>
+            <div class="glass-card p-3 rounded-xl">
+                <span class="text-[10px] uppercase font-bold text-zinc-500 block">Variable</span>
+                <span id="val-variable" class="text-sm font-semibold text-amber-400">0 kr.</span>
+            </div>
+        </section>
+
+        <!-- Add Transaction Form -->
+        <section class="glass-card p-5 rounded-2xl space-y-4">
+            <h2 class="text-xs font-bold text-zinc-300 uppercase tracking-wider">Tilføj Postering</h2>
+            <form id="tx-form" onsubmit="handleAddTx(event)" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <select id="tx-type" onchange="toggleCategorySelect()" class="bg-zinc-900 border border-zinc-700/80 text-zinc-200 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
+                        <option value="variable">Variable udgift</option>
+                        <option value="fixed">Fast udgift</option>
+                        <option value="income">Indtægt</option>
+                    </select>
+                    <input type="number" id="tx-amount" placeholder="Beløb (kr)" required step="any" class="bg-zinc-900 border border-zinc-700/80 text-zinc-100 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <select id="tx-category" class="bg-zinc-900 border border-zinc-700/80 text-zinc-200 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
+                        <option value="Husleje">Husleje</option>
+                        <option value="Gæld">Gæld</option>
+                        <option value="Abonnementer">Abonnementer</option>
+                        <option value="Husholdning">Husholdning</option>
+                        <option value="Forsikringer">Forsikringer</option>
+                        <option value="Erhverv">Erhverv</option>
+                        <option value="Bil">Bil</option>
+                        <option value="Transport">Transport</option>
+                        <option value="Restaurant">Restaurant</option>
+                        <option value="Rejse">Rejse</option>
+                        <option value="Andet">Andet</option>
+                    </select>
+                    <input type="date" id="tx-date" class="bg-zinc-900 border border-zinc-700/80 text-zinc-200 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <input type="text" id="tx-title" placeholder="Beskrivelse (f.eks. Indkøb, Netflix)" required class="w-full bg-zinc-900 border border-zinc-700/80 text-zinc-100 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500">
+                
+                <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-zinc-950 font-bold py-3 rounded-xl transition">
+                    Tilføj
+                </button>
+            </form>
+        </section>
+
+        <!-- Visual Distribution (Chart) -->
+        <section class="glass-card p-5 rounded-2xl space-y-4">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Forbrug pr. Kategori (Måned)</h2>
+            <div class="relative w-full max-w-[220px] mx-auto h-[220px]">
+                <canvas id="categoryChart"></canvas>
+            </div>
+            <div id="chart-legend" class="grid grid-cols-2 gap-2 text-xs pt-2"></div>
+        </section>
+
+        <!-- Transaction History for Month -->
+        <section class="space-y-3">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Historik For Måneden</h2>
+            <div id="tx-list" class="space-y-2"></div>
+        </section>
+
+        <!-- Year-To-Date Stats -->
+        <section class="glass-card p-5 rounded-2xl space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-300">Årsstatistik (<span id="ytd-year"></span>)</h2>
+                <span id="ytd-total" class="text-xs font-bold text-amber-400">0 kr.</span>
+            </div>
+            <div id="ytd-list" class="space-y-2 text-xs"></div>
+        </section>
+
+    </main>
+
+    <script>
+        const CATEGORY_COLORS = {
+            'Husleje': '#3b82f6',
+            'Gæld': '#ef4444',
+            'Abonnementer': '#8b5cf6',
+            'Husholdning': '#10b981',
+            'Forsikringer': '#6366f1',
+            'Erhverv': '#06b6d4',
+            'Bil': '#f59e0b',
+            'Transport': '#ec4899',
+            'Restaurant': '#f97316',
+            'Rejse': '#14b8a6',
+            'Andet': '#6b7280',
+            'Indtægt': '#22c55e'
+        };
+
+        let viewDate = new Date(); // Controls selected month/year view
+        let chartInstance = null;
+
+        let state = {
+            transactions: JSON.parse(localStorage.getItem('safespend_txs')) || []
+        };
+
+        // Initialize Date Input Default to Today
+        document.getElementById('tx-date').valueToDate = new Date();
+        document.getElementById('tx-date').value = new Date().toISOString().substring(0, 10);
+
+        function saveState() {
+            localStorage.setItem('safespend_txs', JSON.stringify(state.transactions));
+            render();
+        }
+
+        function changeMonth(delta) {
+            viewDate.setMonth(viewDate.getMonth() + delta);
+            render();
+        }
+
+        function toggleCategorySelect() {
+            const type = document.getElementById('tx-type').value;
+            const catSelect = document.getElementById('tx-category');
+            if (type === 'income') {
+                catSelect.disabled = true;
+                catSelect.classList.add('opacity-40');
+            } else {
+                catSelect.disabled = false;
+                catSelect.classList.remove('opacity-40');
+            }
+        }
+
+        function handleAddTx(e) {
+            e.preventDefault();
+            const type = document.getElementById('tx-type').value;
+            const amount = parseFloat(document.getElementById('tx-amount').value);
+            const title = document.getElementById('tx-title').value;
+            const category = type === 'income' ? 'Indtægt' : document.getElementById('tx-category').value;
+            const customDate = document.getElementById('tx-date').value;
+
+            if (!amount || amount <= 0) return;
+
+            const tx = {
+                id: Date.now(),
+                type,
+                amount,
+                title,
+                category,
+                date: customDate ? new Date(customDate).toISOString() : new Date().toISOString()
+            };
+
+            state.transactions.unshift(tx);
+            saveState();
+
+            document.getElementById('tx-amount').value = '';
+            document.getElementById('tx-title').value = '';
+        }
+
+        function deleteTx(id) {
+            state.transactions = state.transactions.filter(t => t.id !== id);
+            saveState();
+        }
+
+        function calculateMetrics() {
+            const viewMonth = viewDate.getMonth();
+            const viewYear = viewDate.getFullYear();
+            const today = new Date();
+
+            const isCurrentMonth = today.getMonth() === viewMonth && today.getFullYear() === viewYear;
+
+            const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+            const currentDay = isCurrentMonth ? today.getDate() : daysInMonth;
+            const remainingDays = Math.max((daysInMonth - currentDay) + 1, 1);
+
+            let totalIncome = 0;
+            let totalFixed = 0;
+            let totalVariable = 0;
+            let categoryTotals = {};
+
+            state.transactions.forEach(tx => {
+                const txDate = new Date(tx.date);
+                if (txDate.getMonth() === viewMonth && txDate.getFullYear() === viewYear) {
+                    if (tx.type === 'income') {
+                        totalIncome += tx.amount;
+                    } else {
+                        if (tx.type === 'fixed') totalFixed += tx.amount;
+                        if (tx.type === 'variable') totalVariable += tx.amount;
+
+                        categoryTotals[tx.category] = (categoryTotals[tx.category] || 0) + tx.amount;
+                    }
+                }
+            });
+
+            const netPool = totalIncome - totalFixed;
+            const availableTotal = netPool - totalVariable;
+            
+            const dailySafe = availableTotal > 0 ? availableTotal / remainingDays : 0;
+            const weeklySafe = dailySafe * 7;
+
+            const targetDaily = netPool > 0 ? netPool / daysInMonth : 1;
+            const dailyPct = Math.min(Math.max((dailySafe / targetDaily) * 100, 0), 100);
+            const weeklyPct = Math.min(Math.max((weeklySafe / (targetDaily * 7)) * 100, 0), 100);
+
+            return {
+                availableTotal,
+                dailySafe,
+                weeklySafe,
+                totalIncome,
+                totalFixed,
+                totalVariable,
+                dailyPct,
+                weeklyPct,
+                categoryTotals
+            };
+        }
+
+        function calculateYTD() {
+            const viewYear = viewDate.getFullYear();
+            let ytdTotals = {};
+            let grandTotalExpenses = 0;
+
+            state.transactions.forEach(tx => {
+                const txDate = new Date(tx.date);
+                if (txDate.getFullYear() === viewYear && tx.type !== 'income') {
+                    ytdTotals[tx.category] = (ytdTotals[tx.category] || 0) + tx.amount;
+                    grandTotalExpenses += tx.amount;
+                }
+            });
+
+            return { ytdTotals, grandTotalExpenses, year: viewYear };
+        }
+
+        function formatDKK(val) {
+            return new Intl.NumberFormat('da-DK', { style: 'currency', currency: 'DKK', maximumFractionDigits: 0 }).format(val);
+        }
+
+        function renderChart(categoryTotals) {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            const labels = Object.keys(categoryTotals);
+            const data = Object.values(categoryTotals);
+            const colors = labels.map(l => CATEGORY_COLORS[l] || '#6b7280');
+
+            if (chartInstance) chartInstance.destroy();
+
+            if (labels.length === 0) {
+                ctx.clearRect(0, 0, 220, 220);
+                document.getElementById('chart-legend').innerHTML = `<div class="col-span-2 text-center text-zinc-600 text-xs">Ingen udgifter i denne måned</div>`;
+                return;
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    cutout: '75%'
+                }
+            });
+
+            // Render Custom Legend
+            const legendEl = document.getElementById('chart-legend');
+            legendEl.innerHTML = '';
+            labels.forEach(label => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between text-[11px] bg-zinc-900/60 p-1.5 rounded-lg border border-zinc-800/60';
+                item.innerHTML = `
+                    <div class="flex items-center gap-1.5 overflow-hidden">
+                        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${CATEGORY_COLORS[label] || '#6b7280'}"></span>
+                        <span class="text-zinc-300 truncate">${label}</span>
+                    </div>
+                    <span class="font-bold text-zinc-100">${formatDKK(categoryTotals[label])}</span>
+                `;
+                legendEl.appendChild(item);
+            });
+        }
+
+        function render() {
+            // Update Header Display
+            document.getElementById('current-month-display').innerText = viewDate.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' });
+
+            const m = calculateMetrics();
+
+            document.getElementById('val-available').innerText = formatDKK(m.availableTotal);
+            document.getElementById('val-daily').innerText = formatDKK(m.dailySafe);
+            document.getElementById('val-weekly').innerText = formatDKK(m.weeklySafe);
+
+            document.getElementById('val-income').innerText = formatDKK(m.totalIncome);
+            document.getElementById('val-fixed').innerText = formatDKK(m.totalFixed);
+            document.getElementById('val-variable').innerText = formatDKK(m.totalVariable);
+
+            document.getElementById('bar-daily').style.width = `${m.dailyPct}%`;
+            document.getElementById('bar-weekly').style.width = `${m.weeklyPct}%`;
+
+            // Chart Render
+            renderChart(m.categoryTotals);
+
+            // Render Month Transactions
+            const listEl = document.getElementById('tx-list');
+            listEl.innerHTML = '';
+
+            const monthTxs = state.transactions.filter(tx => {
+                const d = new Date(tx.date);
+                return d.getMonth() === viewDate.getMonth() && d.getFullYear() === viewDate.getFullYear();
+            });
+
+            if (monthTxs.length === 0) {
+                listEl.innerHTML = `<div class="text-center text-zinc-600 text-xs py-6">Ingen posteringer fundet for denne måned</div>`;
+            } else {
+                monthTxs.forEach(tx => {
+                    const dateStr = new Date(tx.date).toLocaleDateString('da-DK', { day: 'numeric', month: 'short' });
+                    const isPositive = tx.type === 'income';
+                    const colorClass = isPositive ? 'text-emerald-400' : (tx.type === 'fixed' ? 'text-rose-400' : 'text-zinc-200');
+                    const prefix = isPositive ? '+' : '-';
+
+                    const card = document.createElement('div');
+                    card.className = 'glass-card p-3.5 rounded-xl flex justify-between items-center text-sm';
+                    card.innerHTML = `
+                        <div>
+                            <div class="font-medium text-zinc-100">${tx.title}</div>
+                            <div class="text-[11px] text-zinc-500">${dateStr} • <span style="color:${CATEGORY_COLORS[tx.category] || '#a1a1aa'}">${tx.category}</span></div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold ${colorClass}">${prefix}${formatDKK(tx.amount)}</span>
+                            <button onclick="deleteTx(${tx.id})" class="text-zinc-600 hover:text-rose-400 text-xs">✕</button>
+                        </div>
+                    `;
+                    listEl.appendChild(card);
+                });
+            }
+
+            // Render YTD Stats
+            const ytd = calculateYTD();
+            document.getElementById('ytd-year').innerText = ytd.year;
+            document.getElementById('ytd-total').innerText = formatDKK(ytd.grandTotalExpenses);
+
+            const ytdListEl = document.getElementById('ytd-list');
+            ytdListEl.innerHTML = '';
+
+            const sortedYtd = Object.entries(ytd.ytdTotals).sort((a, b) => b[1] - a[1]);
+
+            if (sortedYtd.length === 0) {
+                ytdListEl.innerHTML = `<div class="text-center text-zinc-600 py-2">Ingen årsdata endnu</div>`;
+            } else {
+                sortedYtd.forEach(([cat, sum]) => {
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between items-center border-b border-zinc-800/50 pb-1.5';
+                    row.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full" style="background-color: ${CATEGORY_COLORS[cat] || '#6b7280'}"></span>
+                            <span class="text-zinc-300">${cat}</span>
+                        </div>
+                        <span class="font-semibold text-zinc-200">${formatDKK(sum)}</span>
+                    `;
+                    ytdListEl.appendChild(row);
+                });
+            }
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.transactions));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `safespend_backup_${new Date().toISOString().slice(0,10)}.json`);
+            dlAnchorElem.click();
+        }
+
+        // Initial Load
+        render();
+    </script>
+</body>
+</html>
