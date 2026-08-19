@@ -57,7 +57,7 @@
                         <span class="text-zinc-400 font-medium">Til rådighed denne uge</span>
                         <span class="font-bold text-zinc-100" id="val-weekly">0 kr.</span>
                     </div>
-                    <div class="w-full bg-zinc-800 rounded-full h-2 rounded-full overflow-hidden">
+                    <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
                         <div id="bar-weekly" class="bg-emerald-500 h-2 transition-all duration-500" style="width: 0%"></div>
                     </div>
                 </div>
@@ -171,15 +171,13 @@
             'Indtægt': '#22c55e'
         };
 
-        let viewDate = new Date(); // Controls selected month/year view
+        let viewDate = new Date();
         let chartInstance = null;
 
         let state = {
             transactions: JSON.parse(localStorage.getItem('safespend_txs')) || []
         };
 
-        // Initialize Date Input Default to Today
-        document.getElementById('tx-date').valueToDate = new Date();
         document.getElementById('tx-date').value = new Date().toISOString().substring(0, 10);
 
         function saveState() {
@@ -241,10 +239,18 @@
             const today = new Date();
 
             const isCurrentMonth = today.getMonth() === viewMonth && today.getFullYear() === viewYear;
+            const isFutureMonth = new Date(viewYear, viewMonth, 1) > today;
 
             const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-            const currentDay = isCurrentMonth ? today.getDate() : daysInMonth;
-            const remainingDays = Math.max((daysInMonth - currentDay) + 1, 1);
+            
+            let currentDay = 1;
+            if (isCurrentMonth) {
+                currentDay = today.getDate();
+            } else if (!isFutureMonth) {
+                currentDay = daysInMonth;
+            }
+
+            const remainingDaysInMonth = Math.max((daysInMonth - currentDay) + 1, 1);
 
             let totalIncome = 0;
             let totalFixed = 0;
@@ -268,8 +274,14 @@
             const netPool = totalIncome - totalFixed;
             const availableTotal = netPool - totalVariable;
             
-            const dailySafe = availableTotal > 0 ? availableTotal / remainingDays : 0;
-            const weeklySafe = dailySafe * 7;
+            const dailySafe = availableTotal > 0 ? availableTotal / remainingDaysInMonth : 0;
+
+            const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+            const daysLeftInWeek = Math.min(8 - dayOfWeek, remainingDaysInMonth);
+
+            const weeklySafe = isCurrentMonth 
+                ? Math.min(dailySafe * daysLeftInWeek, Math.max(availableTotal, 0))
+                : Math.min(dailySafe * 7, Math.max(availableTotal, 0));
 
             const targetDaily = netPool > 0 ? netPool / daysInMonth : 1;
             const dailyPct = Math.min(Math.max((dailySafe / targetDaily) * 100, 0), 100);
@@ -341,7 +353,6 @@
                 }
             });
 
-            // Render Custom Legend
             const legendEl = document.getElementById('chart-legend');
             legendEl.innerHTML = '';
             labels.forEach(label => {
@@ -359,7 +370,6 @@
         }
 
         function render() {
-            // Update Header Display
             document.getElementById('current-month-display').innerText = viewDate.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' });
 
             const m = calculateMetrics();
@@ -375,10 +385,8 @@
             document.getElementById('bar-daily').style.width = `${m.dailyPct}%`;
             document.getElementById('bar-weekly').style.width = `${m.weeklyPct}%`;
 
-            // Chart Render
             renderChart(m.categoryTotals);
 
-            // Render Month Transactions
             const listEl = document.getElementById('tx-list');
             listEl.innerHTML = '';
 
@@ -412,7 +420,6 @@
                 });
             }
 
-            // Render YTD Stats
             const ytd = calculateYTD();
             document.getElementById('ytd-year').innerText = ytd.year;
             document.getElementById('ytd-total').innerText = formatDKK(ytd.grandTotalExpenses);
@@ -448,7 +455,6 @@
             dlAnchorElem.click();
         }
 
-        // Initial Load
         render();
     </script>
 </body>
