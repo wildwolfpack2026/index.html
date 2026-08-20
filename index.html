@@ -23,7 +23,7 @@
 </head>
 <body class="pb-24">
 
-    <!-- Header med Måned/År Navigation -->
+    <!-- Header med Måned/År Navigation og Genbrug -->
     <header class="p-6 pb-4 border-b border-zinc-800/80 flex justify-between items-center">
         <div>
             <h1 class="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">SafeSpend</h1>
@@ -33,9 +33,14 @@
                 <button onclick="changeMonth(1)" class="text-zinc-400 hover:text-white p-1">►</button>
             </div>
         </div>
-        <button onclick="exportData()" class="text-xs bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg border border-zinc-700/60 transition">
-            Backup
-        </button>
+        <div class="flex items-center gap-2">
+            <button onclick="copyPreviousMonth()" class="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-500/30 transition font-medium">
+                Genbrug posteringer
+            </button>
+            <button onclick="exportData()" class="text-xs bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg border border-zinc-700/60 transition">
+                Backup
+            </button>
+        </div>
     </header>
 
     <main class="max-w-md mx-auto p-4 space-y-6">
@@ -202,6 +207,51 @@
                 catSelect.disabled = false;
                 catSelect.classList.remove('opacity-40');
             }
+        }
+
+        function copyPreviousMonth() {
+            const prevDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
+            const prevMonth = prevDate.getMonth();
+            const prevYear = prevDate.getFullYear();
+
+            const targetMonth = viewDate.getMonth();
+            const targetYear = viewDate.getFullYear();
+
+            const prevTxs = state.transactions.filter(tx => {
+                const d = new Date(tx.date);
+                return d.getMonth() === prevMonth && d.getFullYear() === prevYear && (tx.type === 'income' || tx.type === 'fixed');
+            });
+
+            if (prevTxs.length === 0) {
+                alert('Ingen faste udgifter eller indtægter fundet i den forrige måned.');
+                return;
+            }
+
+            if (!confirm(`Vil du kopiere ${prevTxs.length} faste posteringer fra forrige måned til denne måned?`)) {
+                return;
+            }
+
+            const newTxs = prevTxs.map((tx, idx) => {
+                const oldDate = new Date(tx.date);
+                const day = oldDate.getDate();
+                
+                const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+                const safeDay = Math.min(day, lastDayOfTargetMonth);
+                
+                const newDate = new Date(targetYear, targetMonth, safeDay);
+
+                return {
+                    id: Date.now() + idx,
+                    type: tx.type,
+                    amount: tx.amount,
+                    title: tx.title,
+                    category: tx.category,
+                    date: newDate.toISOString()
+                };
+            });
+
+            state.transactions = [...newTxs, ...state.transactions];
+            saveState();
         }
 
         function handleAddTx(e) {
@@ -409,7 +459,6 @@
             if (monthTxs.length === 0) {
                 listEl.innerHTML = `<div class="text-center text-zinc-600 text-xs py-6">Ingen posteringer fundet for denne måned</div>`;
             } else {
-                // Group transactions by Category
                 const grouped = {};
                 monthTxs.forEach(tx => {
                     const groupKey = tx.type === 'income' ? 'Indtægter' : tx.category;
@@ -418,7 +467,7 @@
                     grouped[groupKey].total += tx.amount;
                 });
 
-                Object.keys(grouped).forEach((cat, idx) => {
+                Object.keys(grouped).forEach((cat) => {
                     const groupData = grouped[cat];
                     const safeCatId = cat.replace(/\s+/g, '-');
                     const color = CATEGORY_COLORS[cat] || '#a1a1aa';
