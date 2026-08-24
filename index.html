@@ -59,7 +59,7 @@
                 <!-- Weekly -->
                 <div class="space-y-1.5">
                     <div class="flex justify-between text-sm">
-                        <span class="text-zinc-400 font-medium">Til rådighed pr. uge</span>
+                        <span class="text-zinc-400 font-medium">Til rådighed pr. uge ( / 4 )</span>
                         <span class="font-bold text-zinc-100" id="val-weekly">0 kr.</span>
                     </div>
                     <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
@@ -70,7 +70,7 @@
                 <!-- Daily -->
                 <div class="space-y-1.5">
                     <div class="flex justify-between text-sm">
-                        <span class="text-zinc-400 font-medium">Til rådighed pr. dag</span>
+                        <span class="text-zinc-400 font-medium">Til rådighed pr. dag ( / 30 )</span>
                         <span class="font-bold text-emerald-400" id="val-daily">0 kr.</span>
                     </div>
                     <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
@@ -288,21 +288,6 @@
         function calculateMetrics() {
             const viewMonth = viewDate.getMonth();
             const viewYear = viewDate.getFullYear();
-            const today = new Date();
-
-            const isCurrentMonth = today.getMonth() === viewMonth && today.getFullYear() === viewYear;
-            const isFutureMonth = new Date(viewYear, viewMonth, 1) > today;
-
-            const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-            
-            let currentDay = 1;
-            if (isCurrentMonth) {
-                currentDay = today.getDate();
-            } else if (!isFutureMonth) {
-                currentDay = daysInMonth;
-            }
-
-            const remainingDaysInMonth = Math.max((daysInMonth - currentDay) + 1, 1);
 
             let totalIncome = 0;
             let totalFixed = 0;
@@ -326,12 +311,15 @@
             const netPool = totalIncome - totalFixed;
             const availableTotal = netPool - totalVariable;
             
-            const dailySafe = availableTotal > 0 ? availableTotal / remainingDaysInMonth : 0;
-            const weeklySafe = Math.min(dailySafe * 7, Math.max(availableTotal, 0));
+            // Altid direkte opdelt: ugentligt / 4 og dagligt / 30 af det nuværende restbeløb
+            const weeklySafe = availableTotal > 0 ? availableTotal / 4 : 0;
+            const dailySafe = availableTotal > 0 ? availableTotal / 30 : 0;
 
-            const targetDaily = netPool > 0 ? netPool / daysInMonth : 1;
-            const dailyPct = Math.min(Math.max((dailySafe / targetDaily) * 100, 0), 100);
-            const weeklyPct = Math.min(Math.max((weeklySafe / (targetDaily * 7)) * 100, 0), 100);
+            const maxWeeklyTarget = netPool > 0 ? netPool / 4 : 1;
+            const maxDailyTarget = netPool > 0 ? netPool / 30 : 1;
+
+            const weeklyPct = Math.min(Math.max((weeklySafe / maxWeeklyTarget) * 100, 0), 100);
+            const dailyPct = Math.min(Math.max((dailySafe / maxDailyTarget) * 100, 0), 100);
 
             return {
                 availableTotal,
