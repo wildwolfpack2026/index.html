@@ -327,13 +327,7 @@
             const availableTotal = netPool - totalVariable;
             
             const dailySafe = availableTotal > 0 ? availableTotal / remainingDaysInMonth : 0;
-
-            const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
-            const daysLeftInWeek = Math.min(8 - dayOfWeek, remainingDaysInMonth);
-
-            const weeklySafe = isCurrentMonth 
-                ? Math.min(dailySafe * daysLeftInWeek, Math.max(availableTotal, 0))
-                : Math.min(dailySafe * 7, Math.max(availableTotal, 0));
+            const weeklySafe = Math.min(dailySafe * 7, Math.max(availableTotal, 0));
 
             const targetDaily = netPool > 0 ? netPool / daysInMonth : 1;
             const dailyPct = Math.min(Math.max((dailySafe / targetDaily) * 100, 0), 100);
